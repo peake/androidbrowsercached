@@ -1,0 +1,10 @@
+#!/system/bin/sh
+
+# To specify a tmpfs size other than the default of 40 (megabytes),
+# prepend the variable BROWSER_CACHE_SIZE, defined to the size desired.
+# Example (the size can be between 1 and 999 inclusively):
+# BROWSER_CACHE_SIZE=75 /system/xbin/androidbrowsercached
+#
+if [ -x /system/xbin/androidbrowsercached ]; then
+  /system/xbin/androidbrowsercached
+fi
