@@ -15,7 +15,7 @@
  *
  * androidbrowsercached.c - Android Browser Cache Daemon (ABCD)
  * created 14 Apr 2013
- * revision 2013041900
+ * revision 2013050300
  * qcompile: gcc -W -Wall -o androidbrowsercached androidbrowsercached.c
  */
 
@@ -33,15 +33,16 @@
 #define BROWSER_CACHE_DIR BROWSER_DATA_DIR "/cache"
 #define BROWSER_CACHE_DIR_PERM 0700
 #define BROWSER_CACHE_MOUNT_TAG "browser_cache"
-#define BROWSER_CACHE_SIZE 40 /* megs, by default */
+#define BROWSER_CACHE_SIZE 50 /* megs, by default */
 #define BROWSER_SESSION_FILE "browser_state.parcel"
 #define BROWSER_SESSION_PATH BROWSER_CACHE_DIR "/" BROWSER_SESSION_FILE
 #define BROWSER_SESSION_SAVE_PATH BROWSER_DATA_DIR "/." BROWSER_SESSION_FILE
 #define BROWSER_SESSION_FILE_PERM 0600
+#define ABCD_LOCK_FILE BROWSER_CACHE_DIR "/.androidbrowsercached.lock"
 #define MOUNT_OPTS_LEN 10
-#define BUF_SIZE 256
+#define BUF_SIZE 512
 
-static void add_watch(int fd)
+static void add_watch(const int fd)
 {
 	int s = 1;
 
@@ -70,14 +71,14 @@ int main()
 	struct stat sbuf;
 	struct inotify_event *ine;
 
-	if (fork())
-		exit(0);
-
 	if (stat(BROWSER_DATA_DIR, &sbuf) == -1)
 		exit(1);
 
 	uid = sbuf.st_uid;
 	gid = sbuf.st_gid;
+
+	if (stat(ABCD_LOCK_FILE, &sbuf) == 0 || errno != ENOENT)
+		exit(1);
 
 	if ((p = getenv("BROWSER_CACHE_SIZE")) != NULL) {
 		size = strtol(p, (char **)NULL, 10);
@@ -93,6 +94,14 @@ int main()
 
 	chown(BROWSER_CACHE_DIR, uid, gid);
 	chmod(BROWSER_CACHE_DIR, BROWSER_CACHE_DIR_PERM);
+
+	if ((r = open(ABCD_LOCK_FILE, O_CREAT | O_EXCL | O_RDONLY, 0400)) == -1)
+		exit(1);
+
+	close(r);
+
+	if (fork())
+		exit(0);
 
 	if ((fo = creat(BROWSER_SESSION_PATH, BROWSER_SESSION_FILE_PERM)) == -1)
 		exit(1);

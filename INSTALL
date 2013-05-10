@@ -1,7 +1,6 @@
-To install or upgrade from the command-line, open a terminal emulator window
-and type the following two commands:
+To install, upgrade, or uninstall from the command-line, open a
+terminal emulator window and type the following command:
 
-  su
-  sh install.sh
+  su -c "sh install.sh"
 
 and follow the on-screen prompts.

@@ -1,0 +1,17 @@
+revision 2013050300 (10 May 2013)
+ * Added a lock file to the daemon to prevent multiple starts.
+ * fork(2) later in the daemon to help prevent lock file races.
+ * Increased the daemon read/write buffer size from 256 to 512 bytes.
+ * Increased the default cache size from 40 to 50 megabytes.
+ * Updated the installer script to include support for:
+   + Uninstalling
+   + Enabling / Disabling
+   + Changing cache size without needing to upgrade (need sed(1) via BusyBox)
+   + `/system/etc/init.d' directory if it exists
+ * Renamed `initrc-example' to `init.d/90androidbrowsercached'.
+
+revision 2013041901 (22 Apr 2013)
+ * Added an installer script (install.sh) and supporting doc (INSTALL).
+
+revision 2013041900 (19 Apr 2013)
+ * Initial public release.
