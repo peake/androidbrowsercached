@@ -1,3 +1,9 @@
+revision 2013050301 (18 May 2013)
+ * Updates to the installer script:
+   + Fix broken check for superuser privileges.
+   + Case-insensitivity for yes/no choices.
+   + Stylistic changes and other needless code churn.
+
 revision 2013050300 (10 May 2013)
  * Added a lock file to the daemon to prevent multiple starts.
  * fork(2) later in the daemon to help prevent lock file races.

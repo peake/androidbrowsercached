@@ -15,16 +15,16 @@
 #
 # install.sh - Command-line installer script for Android Browser Cache Daemon
 # created 20 Apr 2013
-# revision 2013050300
+# revision 2013050301
 
 PATH="/system/bin:/system/xbin"
 
 DEFAULT_CACHE_SIZE=50 # from the C source
-SED_BIN="/system/xbin/sed" # from busybox
+SED_BIN="/system/xbin/sed" # from BusyBox
 SH_BIN="/system/bin/sh" # mksh by default
 INIT_D_DIR="/system/etc/init.d"
 
-SELECT_CHANGE_CACHE_SIZE=false
+CAN_CHANGE_CACHE_SIZE=false
 
 ABCD_SOURCE="androidbrowsercached"
 ABCD_DEST="/system/xbin/$ABCD_SOURCE"
@@ -45,6 +45,9 @@ ABCD_MOUNT_POINT="/data/data/com.android.browser/cache"
 OWA_CHECKSUM="1ffe44db148632732c52adeb09af2226  /system/etc/install-recovery.sh"
 OWA_UPGRADE=false
 
+##
+# void exit_cleanup(void)
+#
 function exit_cleanup()
 {
   mount -o remount,ro /system 2>/dev/null
@@ -60,7 +63,8 @@ function read_yn_resp()
     echo -n "$1"
     read -n 1
     echo
-    if [ "$REPLY" == "y" ] || [ "$REPLY" == "n" ]; then
+    if [ "$REPLY" == "Y" ] || [ "$REPLY" == "y" ] || \
+       [ "$REPLY" == "N" ] || [ "$REPLY" == "n" ]; then
       return
     fi
   done
@@ -79,14 +83,13 @@ function get_cache_size()
     echo -n "Browser cache size (1-999): "
     read
     echo
-    if [ "$REPLY" == "" ] || [ "$REPLY" == "$DEFAULT_CACHE_SIZE" ]; then
+    if [ -z "$REPLY" ] || [ "$REPLY" == "$DEFAULT_CACHE_SIZE" ]; then
       read_yn_resp "Please confirm: Use the default cache size of $DEFAULT_CACHE_SIZE megabytes (y/n)? "
       echo
-      if [ "$REPLY" == "y" ]; then
+      if [ "$REPLY" == "Y" ] || [ "$REPLY" == "y" ]; then
         return
-      else
-        continue
       fi
+      continue
     fi
     if (( $REPLY < 1 )) || (( $REPLY > 999 )); then
       echo "Invalid size entered."
@@ -96,18 +99,34 @@ function get_cache_size()
     ABCD_CACHE_SIZE=$REPLY
     read_yn_resp "Please confirm: Use cache size of $ABCD_CACHE_SIZE megabytes (y/n)? "
     echo
-    if [ "$REPLY" == "y" ]; then
+    if [ "$REPLY" == "Y" ] || [ "$REPLY" == "y" ]; then
       return
-    else
-      unset ABCD_CACHE_SIZE
     fi
+    unset ABCD_CACHE_SIZE
   done
 }
 
 ##
-# void do_install_upgrade(void)
+# void change_cache_size(void)
 #
-function do_install_upgrade()
+function change_cache_size()
+{
+  if [ -z "$ABCD_CACHE_SIZE" ] || [ "$ABCD_CACHE_SIZE" == "$DEFAULT_CACHE_SIZE" ]; then
+    SED_SCRIPT="s!^([[:space:]]*)BROWSER_CACHE_SIZE=[0-9]+[[:space:]]+!\\1!"
+  else
+    SED_SCRIPT="s!^([[:space:]]*)(BROWSER_CACHE_SIZE=[0-9]+[[:space:]]+)?(${ABCD_DEST})[[:space:]]*\$!\\1BROWSER_CACHE_SIZE=${ABCD_CACHE_SIZE} \\3!"
+  fi
+
+  if ! $SED_BIN -i -r -e "$SED_SCRIPT" $ABCD_INITRC; then
+    echo "${0}: ERROR: Could not change cache size in initrc file \`${ABCD_INITRC}'" >&2
+    exit_cleanup
+  fi
+}
+
+##
+# void abcd_install_upgrade(void)
+#
+function abcd_install_upgrade()
 {
   if [ ! -f $ABCD_SOURCE ]; then
     echo -n "${0}: ERROR: Program binary \`${ABCD_SOURCE}' not found, " >&2
@@ -116,8 +135,8 @@ function do_install_upgrade()
   fi
 
   if [ -e $ABCD_INITRC ]; then
-    if [ "$(md5 $ABCD_INITRC)" == "$OWA_CHECKSUM" ]; then
-      echo "Existing becomingx Browser2Ram workaround found, will upgrade."
+    if [ "$(md5 $ABCD_INITRC 2>/dev/null)" == "$OWA_CHECKSUM" ]; then
+      echo "Existing becomingx Browser2Ram/Android JB 4.2 workaround found, will upgrade."
       echo
       OWA_UPGRADE=true
       sleep 2
@@ -127,7 +146,7 @@ function do_install_upgrade()
   if [ -f $ABCD_DEST ]; then
     read_yn_resp "Please confirm: Upgrade (y/n)? "
     echo
-    if [ "$REPLY" != "y" ]; then
+    if [ "$REPLY" == "N" ] || [ "$REPLY" == "n" ]; then
       return
     fi
     ABCD_UPGRADE=true
@@ -169,7 +188,7 @@ fi" > $ABCD_INITRC
       echo "${0}: ERROR: Could not write new initrc file \`${ABCD_INITRC}'" >&2
       exit_cleanup
     fi
-  elif ! grep -q "^[^#]*${ABCD_DEST}\$" $ABCD_INITRC; then
+  elif ! grep -q "^[^#]*${ABCD_DEST}[[:space:]]*\$" $ABCD_INITRC; then
     echo -e "\n\
 if [ -x $ABCD_DEST ]; then\n\
   ${ABCD_CACHE_SIZE_VAR}${ABCD_DEST}\n\
@@ -178,8 +197,10 @@ fi" >> $ABCD_INITRC
       echo "${0}: ERROR: Could not write changes to initrc file \`${ABCD_INITRC}'" >&2
       exit_cleanup
     fi
-  else
-    __change_cache_size
+  elif $CAN_CHANGE_CACHE_SIZE; then
+    # the initrc file has already been set-up from a previous install but,
+    # the user may have chosen a new cache size (hopefully they have BusyBox)
+    change_cache_size
   fi
 
   if ! chmod $ABCD_INITRC_PERM $ABCD_INITRC; then
@@ -192,13 +213,13 @@ fi" >> $ABCD_INITRC
 }
 
 ##
-# void do_uninstall(void)
+# void abcd_uninstall(void)
 #
-function do_uninstall()
+function abcd_uninstall()
 {
   read_yn_resp "Please confirm: Uninstall (y/n)? "
   echo
-  if [ "$REPLY" != "y" ]; then
+  if [ "$REPLY" == "N" ] || [ "$REPLY" == "n" ]; then
     return
   fi
 
@@ -229,14 +250,14 @@ function do_uninstall()
 }
 
 ##
-# void do_enable_disable(void)
+# void abcd_enable_disable(void)
 #
-function do_enable_disable()
+function abcd_enable_disable()
 {
   if [ -x $ABCD_DEST ]; then
     read_yn_resp "Please confirm: Disable (y/n)? "
     echo
-    if [ "$REPLY" != "y" ]; then
+    if [ "$REPLY" == "N" ] && [ "$REPLY" == "n" ]; then
       return
     fi
     if ! chmod $ABCD_PERM_NOEXEC $ABCD_DEST; then
@@ -249,7 +270,7 @@ function do_enable_disable()
   elif [ -f $ABCD_DEST ]; then
     read_yn_resp "Please confirm: Enable (y/n)? "
     echo
-    if [ "$REPLY" != "y" ]; then
+    if [ "$REPLY" == "N" ] || [ "$REPLY" == "n" ]; then
       return
     fi
     if ! chmod $ABCD_PERM $ABCD_DEST; then
@@ -263,34 +284,13 @@ function do_enable_disable()
 }
 
 ##
-# void __change_cache_size(void)
+# void abcd_change_cache_size(void)
 #
-function __change_cache_size()
-{
-  if [ ! -x $SED_BIN ]; then
-    return
-  fi
-
-  if [ -z "$ABCD_CACHE_SIZE" ] || [ "$ABCD_CACHE_SIZE" == "$DEFAULT_CACHE_SIZE" ]; then
-    SED_CMD="s!^([[:space:]]*)BROWSER_CACHE_SIZE=[0-9]+[[:space:]]+!\\1!"
-  else
-    SED_CMD="s!^([[:space:]]*)(BROWSER_CACHE_SIZE=[0-9]+[[:space:]]+)?(${ABCD_DEST})[[:space:]]*\$!\\1BROWSER_CACHE_SIZE=${ABCD_CACHE_SIZE} \\3!"
-  fi
-
-  if ! $SED_BIN -i -r -e "$SED_CMD" $ABCD_INITRC; then
-    echo "${0}: ERROR: Could not change cache size in initrc file \`${ABCD_INITRC}'" >&2
-    exit_cleanup
-  fi
-}
-
-##
-# void do_change_cache_size(void)
-#
-function do_change_cache_size()
+function abcd_change_cache_size()
 {
   get_cache_size
 
-  __change_cache_size
+  change_cache_size
 
   echo "Cache size has been changed -- restart your device to make change effective."
   echo
@@ -306,7 +306,7 @@ if [ -f $ABCD_DEST ]; then
   VALID_SELECTS="${VALID_SELECTS}23"
   if [ -f $ABCD_INITRC ] && grep -q "$ABCD_DEST" $ABCD_INITRC && [ -x $SED_BIN ]; then
     VALID_SELECTS="${VALID_SELECTS}4"
-    SELECT_CHANGE_CACHE_SIZE=true
+    CAN_CHANGE_CACHE_SIZE=true
   fi
 fi
 
@@ -327,7 +327,7 @@ while true; do
   if [ -f $ABCD_DEST ]; then
     echo "  3) Uninstall"
   fi
-  if $SELECT_CHANGE_CACHE_SIZE; then
+  if $CAN_CHANGE_CACHE_SIZE; then
     echo "  4) Change Cache Size"
   fi
   echo "  Q) Quit"
@@ -335,13 +335,12 @@ while true; do
   echo -n "Selection: "
   read -n 1
   echo
-  if echo -n "$REPLY" | grep -qi "^[${VALID_SELECTS}]\$"; then
+  if echo -n "$REPLY" | grep -iq "^[${VALID_SELECTS}]\$"; then
     break
-  else
-    echo
-    echo "Invalid selection \`${REPLY}'"
-    sleep 1
   fi
+  echo
+  echo "Invalid selection \`${REPLY}'"
+  sleep 1
 done
 
 if [ "$REPLY" == "Q" ] || [ "$REPLY" == "q" ]; then
@@ -350,7 +349,7 @@ fi
 
 echo
 
-if id | grep -q '^uid=0\(root\) '; then
+if ! id | grep -q '^uid=0(root) '; then
   echo "${0}: ERROR: This program requires superuser (root) privileges." >&2
   exit 1
 fi
@@ -364,16 +363,16 @@ trap exit_cleanup 1 2 3 15
 
 case "$REPLY" in
   1 )
-    do_install_upgrade
+    abcd_install_upgrade
     ;;
   2 )
-    do_enable_disable
+    abcd_enable_disable
     ;;
   3 )
-    do_uninstall
+    abcd_uninstall
     ;;
   4 )
-    do_change_cache_size
+    abcd_change_cache_size
     ;;
 esac
 
