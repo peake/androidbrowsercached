@@ -15,7 +15,7 @@
 #
 # install.sh - Command-line installer script for Android Browser Cache Daemon
 # created 20 Apr 2013
-# revision 2013050301
+# revision 2013050302
 
 PATH="/system/bin:/system/xbin"
 
@@ -257,7 +257,7 @@ function abcd_enable_disable()
   if [ -x $ABCD_DEST ]; then
     read_yn_resp "Please confirm: Disable (y/n)? "
     echo
-    if [ "$REPLY" == "N" ] && [ "$REPLY" == "n" ]; then
+    if [ "$REPLY" == "N" ] || [ "$REPLY" == "n" ]; then
       return
     fi
     if ! chmod $ABCD_PERM_NOEXEC $ABCD_DEST; then

@@ -1,3 +1,6 @@
+revision 2013050302 (19 May 2013)
+ * Fixed a typo in the `disable' code of the installer script.
+
 revision 2013050301 (18 May 2013)
  * Updates to the installer script:
    + Fix broken check for superuser privileges.
